@@ -1,70 +1,74 @@
-# Getting Started with Create React App
+# Frontend para microservicios en AWS
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Este proyecto es una interfaz React para consumir un backend basado en microservicios desplegado en AWS. La aplicación se comunica con un endpoint de API Gateway y permite crear y consultar registros de diferentes entidades.
 
-## Available Scripts
+## Qué hace la aplicación
 
-In the project directory, you can run:
+El componente principal en [src/App.js](src/App.js) define una interfaz con tres pestañas:
 
-### `npm start`
+- Usuarios
+- Cursos
+- Inscripciones
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Cada pestaña muestra un formulario para crear un registro y un campo para consultar por ID. La app usa `fetch` para enviar solicitudes HTTP a la API de AWS.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Integración con AWS
 
-### `npm test`
+La aplicación está configurada para consumir una API REST expuesta por Amazon API Gateway:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- Endpoint base: `https://61gdfto283.execute-api.us-west-2.amazonaws.com/dev`
 
-### `npm run build`
+La lógica del frontend realiza peticiones a rutas como:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- `POST /usuarios`
+- `GET /usuarios/{id}`
+- `POST /cursos`
+- `GET /cursos/{id}`
+- `POST /inscripciones`
+- `GET /inscripciones/{id}`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+En el backend, cada microservicio está asociado a su propia tabla en DynamoDB, lo que permite aislar los datos por dominio.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Arquitectura esperada
 
-### `npm run eject`
+- React frontend: interfaz de usuario
+- Amazon API Gateway: punto de entrada HTTP para las operaciones
+- AWS Lambda: procesamiento de las solicitudes
+- Amazon DynamoDB: almacenamiento de los registros por servicio
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Funcionalidades del frontend
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- Cambiar entre servicios desde la barra de pestañas
+- Registrar datos usando formularios dinámicos
+- Consultar registros por ID
+- Mostrar respuestas del backend con estado HTTP y cuerpo JSON
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Ejecución local
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Instala las dependencias:
 
-## Learn More
+```bash
+npm install
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Inicia la aplicación localmente:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```bash
+npm start
+```
 
-### Code Splitting
+La app quedará disponible en `http://localhost:3000`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Despliegue en AWS
 
-### Analyzing the Bundle Size
+Para usar esta UI con otro entorno de AWS, actualiza la constante `API_BASE` en [src/App.js](src/App.js) con la URL de tu API Gateway desplegada.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Opciones comunes de despliegue:
 
-### Making a Progressive Web App
+- Amazon S3 + CloudFront para el frontend estático
+- AWS Amplify para despliegue continuo
+- API Gateway + Lambda + DynamoDB para el backend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Notas
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+El frontend no maneja la lógica de negocio directamente; solo consume los servicios expuestos por AWS y muestra las respuestas al usuario.
