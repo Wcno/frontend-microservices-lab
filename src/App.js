@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API_BASE = "https://61gdfto283.execute-api.us-west-2.amazonaws.com/dev";
+const API_BASE = "https://ykl4zu5cak.execute-api.us-east-1.amazonaws.com/dev";
 
 const SERVICES = {
   usuarios: {
