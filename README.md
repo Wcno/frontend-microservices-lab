@@ -1,24 +1,24 @@
-# Frontend para microservicios en AWS
+# Frontend for AWS microservices
 
-Este proyecto es una interfaz React para consumir un backend basado en microservicios desplegado en AWS. La aplicación se comunica con un endpoint de API Gateway y permite crear y consultar registros de diferentes entidades.
+This project is a React interface for consuming a microservice-based backend deployed on AWS. The application communicates with an API Gateway endpoint and allows users to create and query records for different entities.
 
-## Qué hace la aplicación
+## What the application does
 
-El componente principal en [src/App.js](src/App.js) define una interfaz con tres pestañas:
+The main component in [src/App.js](src/App.js) defines an interface with three tabs:
 
-- Usuarios
-- Cursos
-- Inscripciones
+- Users
+- Courses
+- Enrollments
 
-Cada pestaña muestra un formulario para crear un registro y un campo para consultar por ID. La app usa `fetch` para enviar solicitudes HTTP a la API de AWS.
+Each tab shows a form for creating a record and a field for querying by ID. The app uses `fetch` to send HTTP requests to the AWS API.
 
-## Integración con AWS
+## AWS integration
 
-La aplicación está configurada para consumir una API REST expuesta por Amazon API Gateway:
+The application is configured to consume a REST API exposed through Amazon API Gateway:
 
-- Endpoint base: `https://61gdfto283.execute-api.us-west-2.amazonaws.com/dev`
+- Base endpoint: `https://61gdfto283.execute-api.us-west-2.amazonaws.com/dev`
 
-La lógica del frontend realiza peticiones a rutas como:
+The frontend sends requests to routes such as:
 
 - `POST /usuarios`
 - `GET /usuarios/{id}`
@@ -27,48 +27,48 @@ La lógica del frontend realiza peticiones a rutas como:
 - `POST /inscripciones`
 - `GET /inscripciones/{id}`
 
-En el backend, cada microservicio está asociado a su propia tabla en DynamoDB, lo que permite aislar los datos por dominio.
+In the backend, each microservice is associated with its own DynamoDB table, which keeps the data isolated by domain.
 
-## Arquitectura esperada
+## Expected architecture
 
-- React frontend: interfaz de usuario
-- Amazon API Gateway: punto de entrada HTTP para las operaciones
-- AWS Lambda: procesamiento de las solicitudes
-- Amazon DynamoDB: almacenamiento de los registros por servicio
+- React frontend: user interface
+- Amazon API Gateway: HTTP entry point for operations
+- AWS Lambda: request processing
+- Amazon DynamoDB: storage for service records
 
-## Funcionalidades del frontend
+## Frontend features
 
-- Cambiar entre servicios desde la barra de pestañas
-- Registrar datos usando formularios dinámicos
-- Consultar registros por ID
-- Mostrar respuestas del backend con estado HTTP y cuerpo JSON
+- Switch between services from the tab bar
+- Register data using dynamic forms
+- Query records by ID
+- Display backend responses with HTTP status and JSON body
 
-## Ejecución local
+## Local execution
 
-Instala las dependencias:
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-Inicia la aplicación localmente:
+Start the application locally:
 
 ```bash
 npm start
 ```
 
-La app quedará disponible en `http://localhost:3000`.
+The app will be available at `http://localhost:3000`.
 
-## Despliegue en AWS
+## AWS deployment
 
-Para usar esta UI con otro entorno de AWS, actualiza la constante `API_BASE` en [src/App.js](src/App.js) con la URL de tu API Gateway desplegada.
+To use this UI with another AWS environment, update the `API_BASE` constant in [src/App.js](src/App.js) with the URL of your deployed API Gateway.
 
-Opciones comunes de despliegue:
+Common deployment options:
 
-- Amazon S3 + CloudFront para el frontend estático
-- AWS Amplify para despliegue continuo
-- API Gateway + Lambda + DynamoDB para el backend
+- Amazon S3 + CloudFront for the static frontend
+- AWS Amplify for continuous deployment
+- API Gateway + Lambda + DynamoDB for the backend
 
-## Notas
+## Notes
 
-El frontend no maneja la lógica de negocio directamente; solo consume los servicios expuestos por AWS y muestra las respuestas al usuario.
+The frontend does not handle business logic directly; it only consumes the services exposed by AWS and displays the responses to the user.
