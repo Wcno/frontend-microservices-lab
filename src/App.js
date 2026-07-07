@@ -43,6 +43,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const service = SERVICES[active];
+  const createFields = service.fields.filter((field) => field.name !== service.idField);
 
   const switchService = (key) => {
     setActive(key);
@@ -254,7 +255,7 @@ export default function App() {
         </div>
 
         <span className="section-label">Crear {service.label.toLowerCase()}</span>
-        {service.fields.map((f) => (
+        {createFields.map((f) => (
           <input
             key={f.name}
             placeholder={f.label}
@@ -265,7 +266,7 @@ export default function App() {
         <button
           className="btn btn-primary"
           onClick={crear}
-          disabled={loading || !form[service.idField]}
+          disabled={loading}
         >
           Guardar registro
         </button>
