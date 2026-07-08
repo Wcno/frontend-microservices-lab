@@ -1,5 +1,87 @@
 import { useEffect, useState } from "react";
 
+const API_BASE = "https://ykl4zu5cak.execute-api.us-east-1.amazonaws.com/dev";
+
+const COGNITO_ENDPOINT = "https://cognito-idp.us-east-1.amazonaws.com/";
+const COGNITO_CLIENT_ID = "1ncjrmqincqh0kndmah63bev6r";
+const AUTH_STORAGE_KEY = "catedra.auth";
+
+const MENSAJES_COGNITO = {
+  UsernameExistsException: "Ya existe una cuenta con ese correo.",
+  NotAuthorizedException: "Correo o contraseña incorrectos.",
+  UserNotConfirmedException: "Confirma tu correo antes de iniciar sesión.",
+  CodeMismatchException: "El código de verificación no es válido.",
+  ExpiredCodeException: "El código expiró, solicita uno nuevo.",
+  InvalidPasswordException: "La contraseña no cumple los requisitos mínimos.",
+  UserNotFoundException: "No existe una cuenta con ese correo.",
+};
+
+async function cognitoRequest(accion, payload) {
+  const res = await fetch(COGNITO_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": `AWSCognitoIdentityProviderService.${accion}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const tipo = (data.__type || "").split("#").pop();
+    throw new Error(MENSAJES_COGNITO[tipo] || data.message || "Ocurrió un error inesperado.");
+  }
+
+  return data;
+}
+
+const cognitoSignUp = (email, password) =>
+  cognitoRequest("SignUp", {
+    ClientId: COGNITO_CLIENT_ID,
+    Username: email,
+    Password: password,
+    UserAttributes: [{ Name: "email", Value: email }],
+  });
+
+const cognitoConfirmSignUp = (email, code) =>
+  cognitoRequest("ConfirmSignUp", {
+    ClientId: COGNITO_CLIENT_ID,
+    Username: email,
+    ConfirmationCode: code,
+  });
+
+const cognitoSignIn = async (email, password) => {
+  const data = await cognitoRequest("InitiateAuth", {
+    AuthFlow: "USER_PASSWORD_AUTH",
+    ClientId: COGNITO_CLIENT_ID,
+    AuthParameters: { USERNAME: email, PASSWORD: password },
+  });
+
+  const { IdToken, AccessToken, RefreshToken } = data.AuthenticationResult;
+  return { email, idToken: IdToken, accessToken: AccessToken, refreshToken: RefreshToken };
+};
+
+function cargarSesion() {
+  try {
+    const guardado = localStorage.getItem(AUTH_STORAGE_KEY);
+    return guardado ? JSON.parse(guardado) : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarSesion(sesion) {
+  if (sesion) {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sesion));
+  } else {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+}
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_VALIDA = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
 const MOCK_CURSOS = [
   { cursoId: "c-001", nombre: "Arquitectura de Microservicios", creditos: "4" },
   { cursoId: "c-002", nombre: "Bases de Datos NoSQL con DynamoDB", creditos: "3" },
@@ -7,29 +89,54 @@ const MOCK_CURSOS = [
   { cursoId: "c-004", nombre: "Diseño de APIs REST", creditos: "3" },
 ];
 
-const USUARIOS_EXISTENTES = new Set(["existente@correo.com"]);
-
-function simularInscripcion(email) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const usuarioNuevo = !USUARIOS_EXISTENTES.has(email.toLowerCase());
-      USUARIOS_EXISTENTES.add(email.toLowerCase());
-      resolve({ usuarioNuevo, mensaje: "Correo enviado" });
-    }, 900);
-  });
-}
-
 export default function App() {
   const [cursos, setCursos] = useState([]);
   const [cargandoCatalogo, setCargandoCatalogo] = useState(true);
   const [seleccionado, setSeleccionado] = useState(null);
+  const [errorCatalogo, setErrorCatalogo] = useState("");
+  const [sesion, setSesion] = useState(() => cargarSesion());
+
+  const iniciarSesion = (nuevaSesion) => {
+    guardarSesion(nuevaSesion);
+    setSesion(nuevaSesion);
+  };
+
+  const cerrarSesion = () => {
+    guardarSesion(null);
+    setSesion(null);
+  };
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setCursos(MOCK_CURSOS);
-      setCargandoCatalogo(false);
-    }, 1000);
-    return () => clearTimeout(t);
+    let activo = true;
+
+    const cargarCatalogo = async () => {
+      setCargandoCatalogo(true);
+      setErrorCatalogo("");
+
+      try {
+        const res = await fetch(`${API_BASE}/cursos`);
+        if (!res.ok) {
+          throw new Error(`No se pudo cargar el catálogo (${res.status})`);
+        }
+
+        const data = await res.json();
+        const cursosApi = Array.isArray(data) ? data : data?.Items ?? [];
+        if (activo) setCursos(cursosApi);
+      } catch (error) {
+        if (activo) {
+          setCursos(MOCK_CURSOS);
+          setErrorCatalogo("No se pudo conectar con la API. Se muestra el catálogo de ejemplo.");
+        }
+      } finally {
+        if (activo) setCargandoCatalogo(false);
+      }
+    };
+
+    cargarCatalogo();
+
+    return () => {
+      activo = false;
+    };
   }, []);
 
   return (
@@ -38,7 +145,10 @@ export default function App() {
 
       <header className="masthead">
         <div className="masthead-inner">
-          <span className="eyebrow">Periodo 2026 · Inscripciones abiertas</span>
+          <div className="masthead-top">
+            <span className="eyebrow">Periodo 2026 · Inscripciones abiertas</span>
+            <BarraSesion sesion={sesion} onCerrarSesion={cerrarSesion} />
+          </div>
           <h1 className="wordmark">
             Cátedra<span className="wordmark-mark">.</span>
           </h1>
@@ -51,6 +161,10 @@ export default function App() {
 
       <main className="catalogo-wrap">
         {cargandoCatalogo && <EstadoCarga />}
+
+        {errorCatalogo && !cargandoCatalogo && (
+          <div className="banner-error">{errorCatalogo}</div>
+        )}
 
         {!cargandoCatalogo && cursos.length > 0 && (
           <div className="catalogo">
@@ -74,7 +188,12 @@ export default function App() {
       </footer>
 
       {seleccionado && (
-        <PanelInscripcion curso={seleccionado} onCerrar={() => setSeleccionado(null)} />
+        <PanelInscripcion
+          curso={seleccionado}
+          sesion={sesion}
+          onIniciarSesion={iniciarSesion}
+          onCerrar={() => setSeleccionado(null)}
+        />
       )}
     </div>
   );
@@ -99,19 +218,113 @@ function TarjetaCurso({ curso, indice, onSeleccionar }) {
   );
 }
 
-function PanelInscripcion({ curso, onCerrar }) {
-  const [email, setEmail] = useState("");
+function BarraSesion({ sesion, onCerrarSesion }) {
+  if (!sesion) {
+    return <span className="sesion-badge sesion-badge-anon">Inicia sesión al inscribirte</span>;
+  }
+  return (
+    <span className="sesion-badge">
+      {sesion.email}
+      <button className="sesion-salir" onClick={onCerrarSesion}>
+        Cerrar sesión
+      </button>
+    </span>
+  );
+}
+
+function PanelInscripcion({ curso, sesion, onIniciarSesion, onCerrar }) {
+  const [vista, setVista] = useState(sesion ? "inscribir" : "login");
+  const [email, setEmail] = useState(sesion?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [codigo, setCodigo] = useState("");
   const [estado, setEstado] = useState("idle");
   const [respuesta, setRespuesta] = useState(null);
+  const [error, setError] = useState("");
 
-  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const emailValido = EMAIL_VALIDO.test(email);
+  const passwordValida = PASSWORD_VALIDA.test(password);
+
+  const iniciarSesionYContinuar = async (correo, clave) => {
+    const nuevaSesion = await cognitoSignIn(correo, clave);
+    onIniciarSesion(nuevaSesion);
+    setVista("inscribir");
+  };
+
+  const manejarLogin = async () => {
+    if (!emailValido || !password) return;
+    setEstado("enviando");
+    setError("");
+    try {
+      await iniciarSesionYContinuar(email, password);
+      setEstado("idle");
+    } catch (err) {
+      setError(err.message);
+      setEstado("idle");
+    }
+  };
+
+  const manejarSignup = async () => {
+    if (!emailValido || !passwordValida) return;
+    setEstado("enviando");
+    setError("");
+    try {
+      await cognitoSignUp(email, password);
+      setVista("confirm");
+      setEstado("idle");
+    } catch (err) {
+      setError(err.message);
+      setEstado("idle");
+    }
+  };
+
+  const manejarConfirm = async () => {
+    if (!codigo) return;
+    setEstado("enviando");
+    setError("");
+    try {
+      await cognitoConfirmSignUp(email, codigo);
+      await iniciarSesionYContinuar(email, password);
+      setEstado("idle");
+    } catch (err) {
+      setError(err.message);
+      setEstado("idle");
+    }
+  };
 
   const enviar = async () => {
-    if (!emailValido) return;
+    if (!sesion) return;
     setEstado("enviando");
-    const data = await simularInscripcion(email);
-    setRespuesta(data);
-    setEstado("ok");
+    setError("");
+
+    try {
+      const res = await fetch(`${API_BASE}/usuarios/inscribir`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sesion.idToken}`,
+        },
+        body: JSON.stringify({
+          email: sesion.email,
+          curso: {
+            cursoId: curso.cursoId,
+            nombre: curso.nombre,
+            creditos: curso.creditos,
+          },
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || `La inscripción falló (${res.status})`);
+      }
+
+      setRespuesta(data);
+      setEstado("ok");
+    } catch (err) {
+      setError(err.message || "No se pudo enviar la inscripción");
+      setEstado("idle");
+    }
   };
 
   return (
@@ -126,14 +339,11 @@ function PanelInscripcion({ curso, onCerrar }) {
           ×
         </button>
 
-        {estado !== "ok" && (
+        {vista === "login" && (
           <>
-            <span className="panel-eyebrow">Confirmar inscripción</span>
+            <span className="panel-eyebrow">Inicia sesión</span>
             <h2 className="panel-titulo">{curso.nombre}</h2>
-            <p className="panel-detalle">
-              {curso.creditos ? `${curso.creditos} créditos · ` : ""}
-              Ingresa tu correo y te enviamos la información del curso.
-            </p>
+            <p className="panel-detalle">Necesitas una cuenta para inscribirte a este curso.</p>
 
             <label className="campo">
               <span className="campo-label">Correo electrónico</span>
@@ -144,22 +354,155 @@ function PanelInscripcion({ curso, onCerrar }) {
                 placeholder="tu@correo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && enviar()}
+                disabled={estado === "enviando"}
+              />
+            </label>
+            <label className="campo">
+              <span className="campo-label">Contraseña</span>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && manejarLogin()}
                 disabled={estado === "enviando"}
               />
             </label>
 
+            {error && <p className="panel-error">{error}</p>}
+
+            <button
+              className="panel-cta"
+              onClick={manejarLogin}
+              disabled={!emailValido || !password || estado === "enviando"}
+            >
+              {estado === "enviando" ? <span className="spinner" /> : "Iniciar sesión"}
+            </button>
+
             <p className="panel-nota">
-              Prueba con <code>existente@correo.com</code> para ver el flujo de usuario ya registrado.
+              ¿No tienes cuenta?{" "}
+              <button
+                type="button"
+                className="panel-link"
+                onClick={() => {
+                  setError("");
+                  setVista("signup");
+                }}
+              >
+                Regístrate
+              </button>
+            </p>
+          </>
+        )}
+
+        {vista === "signup" && (
+          <>
+            <span className="panel-eyebrow">Crea tu cuenta</span>
+            <h2 className="panel-titulo">{curso.nombre}</h2>
+            <p className="panel-detalle">Regístrate para inscribirte y recibir el temario.</p>
+
+            <label className="campo">
+              <span className="campo-label">Correo electrónico</span>
+              <input
+                type="email"
+                inputMode="email"
+                autoFocus
+                placeholder="tu@correo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={estado === "enviando"}
+              />
+            </label>
+            <label className="campo">
+              <span className="campo-label">Contraseña</span>
+              <input
+                type="password"
+                placeholder="Mín. 8 caracteres, mayúscula, minúscula y número"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && manejarSignup()}
+                disabled={estado === "enviando"}
+              />
+            </label>
+
+            {error && <p className="panel-error">{error}</p>}
+
+            <button
+              className="panel-cta"
+              onClick={manejarSignup}
+              disabled={!emailValido || !passwordValida || estado === "enviando"}
+            >
+              {estado === "enviando" ? <span className="spinner" /> : "Registrarme"}
+            </button>
+
+            <p className="panel-nota">
+              ¿Ya tienes cuenta?{" "}
+              <button
+                type="button"
+                className="panel-link"
+                onClick={() => {
+                  setError("");
+                  setVista("login");
+                }}
+              >
+                Inicia sesión
+              </button>
+            </p>
+          </>
+        )}
+
+        {vista === "confirm" && (
+          <>
+            <span className="panel-eyebrow">Confirma tu correo</span>
+            <h2 className="panel-titulo">Revisa tu bandeja</h2>
+            <p className="panel-detalle">
+              Enviamos un código de verificación a <strong>{email}</strong>.
             </p>
 
-            <button className="panel-cta" onClick={enviar} disabled={!emailValido || estado === "enviando"}>
-              {estado === "enviando" ? <span className="spinner" /> : "Enviarme la información"}
+            <label className="campo">
+              <span className="campo-label">Código de verificación</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                placeholder="123456"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && manejarConfirm()}
+                disabled={estado === "enviando"}
+              />
+            </label>
+
+            {error && <p className="panel-error">{error}</p>}
+
+            <button
+              className="panel-cta"
+              onClick={manejarConfirm}
+              disabled={!codigo || estado === "enviando"}
+            >
+              {estado === "enviando" ? <span className="spinner" /> : "Confirmar y continuar"}
             </button>
           </>
         )}
 
-        {estado === "ok" && (
+        {vista === "inscribir" && estado !== "ok" && (
+          <>
+            <span className="panel-eyebrow">Confirmar inscripción</span>
+            <h2 className="panel-titulo">{curso.nombre}</h2>
+            <p className="panel-detalle">
+              {curso.creditos ? `${curso.creditos} créditos · ` : ""}
+              Te enviaremos la información del curso a <strong>{sesion?.email}</strong>.
+            </p>
+
+            {error && <p className="panel-error">{error}</p>}
+
+            <button className="panel-cta" onClick={enviar} disabled={estado === "enviando"}>
+              {estado === "enviando" ? <span className="spinner" /> : "Confirmar inscripción"}
+            </button>
+          </>
+        )}
+
+        {vista === "inscribir" && estado === "ok" && (
           <div className="exito">
             <div className="exito-marca" aria-hidden="true">
               ✓
@@ -170,7 +513,7 @@ function PanelInscripcion({ curso, onCerrar }) {
             <p className="panel-detalle">
               {respuesta?.usuarioNuevo
                 ? `Creamos tu cuenta y te enviamos un correo de bienvenida junto con la información de "${curso.nombre}".`
-                : `Enviamos la información de "${curso.nombre}" a ${email}.`}
+                : `Enviamos la información de "${curso.nombre}" a ${sesion?.email}.`}
             </p>
             <button className="panel-cta" onClick={onCerrar}>
               Volver al catálogo
@@ -228,6 +571,34 @@ function Estilos() {
         padding: 56px 24px 40px;
       }
       .masthead-inner { max-width: 880px; margin: 0 auto; }
+
+      .masthead-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .sesion-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .sesion-badge-anon { font-style: italic; }
+      .sesion-salir {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11.5px;
+        font-family: inherit;
+        color: var(--accent);
+        cursor: pointer;
+      }
+      .sesion-salir:hover { background: var(--card); }
 
       .eyebrow {
         font-size: 12px;
@@ -322,6 +693,17 @@ function Estilos() {
       }
       .pie-marca { text-transform: uppercase; letter-spacing: 0.1em; }
 
+      .banner-error {
+        margin: 0 0 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        border: 1px solid rgba(123,63,47,0.22);
+        background: rgba(123,63,47,0.08);
+        color: #7b3f2f;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
       .overlay {
         position: fixed;
         inset: 0;
@@ -411,6 +793,27 @@ function Estilos() {
         padding: 1px 5px;
         border-radius: 3px;
         font-size: 12px;
+      }
+      .panel-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .panel-error {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(123,63,47,0.22);
+        background: rgba(123,63,47,0.08);
+        color: #7b3f2f;
+        font-size: 13px;
+        line-height: 1.45;
       }
 
       .panel-cta {
